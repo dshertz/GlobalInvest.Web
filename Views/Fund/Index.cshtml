@@ -1,0 +1,70 @@
+@model IEnumerable<GlobalInvest.ViewModels.FundIndexViewModel>
+@using GlobalInvest.ViewModels
+
+@{
+    ViewData["Title"] = "Fonder";
+}
+
+<div class="container my-5">
+    <div class="d-flex justify-content-between mb-3">
+        <a asp-action="Create" class="btn btn-primary">Lägg till ny fond</a>
+    </div>
+
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Namn</th>
+                <th>Valuta</th>
+                <th>Antal NAV-kurser</th>
+                <th>Period</th>
+                <th>Åtgärder</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var fund in Model)
+            {
+                <tr data-id="@fund.Id">
+                    <!-- Namn -->
+                    <td>
+                        <a asp-action="Details" asp-route-id="@fund.Id" class="fund-link name-text">@fund.Name</a>
+                        <input type="text" class="form-control editable-field name-field d-none" value="@fund.Name" />
+                    </td>
+                    <!-- Valuta -->
+                    <td>
+                        <span class="currency-text">@fund.Currency</span>
+                        <input type="text" class="form-control editable-field currency-field d-none"
+                            value="@fund.Currency" />
+                    </td>
+
+                    <!-- Antal NAV-kurser -->
+                    <td>
+                        <span class="nav-text">@fund.NavSummary.TotalCourses</span>
+                    </td>
+
+                    <!-- Period -->
+                    <td>
+                        @* <span class="period-text">
+                            @(((DateTime?)fund.NavSummary.StartDate)?.ToString("yyyy-MM-dd") ?? "")
+                            - @(((DateTime?)fund.NavSummary.EndDate)?.ToString("yyyy-MM-dd") ?? "")
+                        </span> *@
+                        <span class="period-text">
+                            @Html.DisplayFor(model => fund.NavSummary.StartDate) - @Html.DisplayFor(model => fund.NavSummary.EndDate)
+                        </span>
+                    </td>
+
+                    <!-- Åtgärder -->
+                    <td>
+                        <div class="d-flex gap-2 justify-content-center action-buttons">
+                            <form method="post" asp-action="ConfirmDelete" asp-route-id="@fund.Id"
+                                asp-route-returnAction="Index" asp-route-cancelAction="Index">
+                                <button type="submit" class="btn btn-danger btn-sm delete-button">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

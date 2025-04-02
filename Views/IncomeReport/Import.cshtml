@@ -1,0 +1,51 @@
+@model List<GlobalInvest.Models.TaxSummary>
+
+@{
+    var report = ViewData["IncomeReport"] as GlobalInvest.Models.IncomeReport;
+}
+
+<div class="container my-5">
+    <!-- Formulär för att klistra in data -->
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white">
+            <h5>Klistra in taxeringsuppgifter</h5>
+        </div>
+        <div class="card-body">
+            <form asp-action="ImportTaxSummaries" asp-route-id="@ViewData["IncomeReportId"]" method="post">
+                <div class="form-group">
+                    <div class="d-flex justify-content-between">
+                        <label for="taxText" class="form-label">Taxeringsuppgifter (en per rad, tab-separerade):</label>
+                        <a href="#" id="loadExampleTaxData" class="text-primary text-decoration-underline small">
+                            Klistra in exempeldata
+                        </a>
+                    </div>
+                    <textarea id="taxText" name="taxText" class="form-control" rows="10" placeholder="Exempel:
+1998	16300	3354
+1999	22700	4398"></textarea>
+                </div>
+                <div class="d-flex justify-content-center gap-2 mt-3">
+                    <a asp-action="Details" asp-route-id="@ViewData["IncomeReportId"]"
+                        class="btn btn-secondary">Avbryt</a>
+                    <button type="submit" class="btn btn-success">Importera</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const exampleLink = document.getElementById("loadExampleTaxData");
+        const taxTextArea = document.getElementById("taxText");
+
+        exampleLink.addEventListener("click", function (e) {
+            e.preventDefault(); // Förhindra att sidan scrollar till toppen
+            fetch('/data/example-tax-data.tsv')
+                .then(response => response.text())
+                .then(data => {
+                    taxTextArea.value = data;
+                    taxTextArea.focus(); // Sätt fokus på fältet
+                })
+                .catch(error => console.error("Kunde inte ladda exempeldata:", error));
+        });
+    });
+</script>

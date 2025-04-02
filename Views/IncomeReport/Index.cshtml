@@ -1,0 +1,48 @@
+@model IEnumerable<GlobalInvest.ViewModels.IncomeReportViewModel>
+
+@{
+    ViewData["Title"] = "Inkomstrapporter";
+}
+
+<div class="container my-5">
+    <div class="d-flex justify-content-between mb-3">
+        <a asp-action="Create" class="btn btn-primary">Lägg till ny rapport</a>
+    </div>
+
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Namn</th>
+                <th>Valuta</th>
+                <th>Antal Taxeringsår</th>
+                <th>Åtgärder</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var report in Model)
+            {
+                <tr>
+                    <td>
+                        <a asp-action="Details" asp-route-id="@report.Id" class="fund-link name-text">@report.Name</a>
+                    </td>
+                    <td><span class="currency-text">@report.Currency</span>
+                        <input type="text" class="form-control currency-field d-none" value="@report.Currency" />
+                    </td>
+                    <td>
+                        <span class="nav-text">@report.TaxYearsCount</span>
+                    </td>
+                    <td>
+                        <div class="d-flex gap-2 justify-content-center action-buttons">
+                            <form method="post" asp-action="ConfirmDelete" asp-route-id="@report.Id"
+                                asp-route-returnAction="Index" asp-route-cancelAction="Index">
+                                <button type="submit" class="btn btn-danger btn-sm delete-button">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

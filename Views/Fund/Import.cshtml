@@ -1,0 +1,49 @@
+@model List<GlobalInvest.Models.NavCourse>
+@{
+    var fund = ViewData["Fund"] as GlobalInvest.Models.Fund;
+}
+
+<div class="container my-5">
+    <!-- Formulär för att klistra in data -->
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white">
+            <h5>Klistra in NAV-kurser</h5>
+        </div>
+        <div class="card-body">
+            <form asp-action="ImportNavCourses" asp-route-id="@ViewData["FundId"]" method="post">
+                <div class="form-group">
+                    <div class="d-flex justify-content-between">
+                        <label for="navText" class="form-label">NAV-kurser (en per rad, tab-separerade):</label>
+                        <a href="#" id="loadExampleNavData" class="text-primary text-decoration-underline small">Klistra
+                            in exempeldata
+                        </a>
+                    </div>
+                    <textarea id="navText" name="navText" class="form-control" rows="10" placeholder="Exempel:
+AMF Aktiefond Global	411,75	SEK	2025-01-17
+AMF Aktiefond Global	409,88	SEK	2025-01-16"></textarea>
+                </div>
+                <div class="d-flex justify-content-center gap-2 mt-3">
+                    <a asp-action="Details" asp-route-id="@ViewData["FundId"]" class="btn btn-secondary">Avbryt</a>
+                    <button type="submit" class="btn btn-success">Importera</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const exampleLink = document.getElementById("loadExampleNavData");
+        const navTextArea = document.getElementById("navText");
+
+        exampleLink.addEventListener("click", function (e) {
+            e.preventDefault(); // Förhindra att sidan scrollar till toppen
+            fetch('/data/example-nav-data.tsv')
+                .then(response => response.text())
+                .then(data => {
+                    navTextArea.value = data;
+                    navTextArea.focus(); // Sätt fokus på fältet
+                })
+                .catch(error => console.error("Kunde inte ladda exempeldata:", error));
+        });
+    });
+</script>

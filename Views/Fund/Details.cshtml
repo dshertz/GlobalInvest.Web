@@ -1,0 +1,473 @@
+@model GlobalInvest.ViewModels.FundDetailsViewModel
+@using GlobalInvest.ViewModels
+
+<div class="container my-5">
+    <!-- 🏦 Fondöversikt -->
+    <div class="card p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Fondöversikt</h5>
+            <div id="action-buttons" class="d-flex gap-2">
+                <!-- 🗑️ Ta bort-knapp -->
+                <form method="post" asp-action="ConfirmDelete" asp-route-id="@Model.Id" asp-route-returnAction="Index"
+                    asp-route-cancelAction="Details">
+                    <button type="submit" class="btn btn-danger btn-sm delete-button">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </form>
+                <!-- 📝 Redigera-knapp -->
+                <button id="edit-button" class="btn btn-warning btn-sm">
+                    <i class="bi bi-pencil"></i> Redigera
+                </button>
+            </div>
+
+            <!-- 🔹 Spara & Avbryt-knappar (gömd som standard) -->
+            <div id="edit-buttons" class="d-flex gap-2 d-none">
+                <button id="cancel-button" class="btn btn-secondary btn-sm">
+                    <i class="bi bi-x"></i> Avbryt
+                </button>
+                <button id="save-button" class="btn btn-success btn-sm">
+                    <i class="bi bi-check"></i> Spara
+                </button>
+            </div>
+        </div>
+
+        <!-- 📝 Inline-edit för Namn -->
+        <p><strong>Namn:</strong>
+            <span id="name-display">@Model.Name</span>
+            <input type="text" id="name-input" class="edit-input d-none" value="@Model.Name">
+        </p>
+
+        <!-- 💰 Inline-edit för Valuta -->
+        <p><strong>Valuta:</strong>
+            <span id="currency-display">@Model.Currency</span>
+            <select id="currency-input" class="edit-input d-none">
+                <option value="SEK" selected="@("SEK" == Model.Currency)">SEK</option>
+                <option value="EUR" selected="@("EUR" == Model.Currency)">EUR</option>
+                <option value="USD" selected="@("USD" == Model.Currency)">USD</option>
+            </select>
+        </p>
+
+        <!-- 📈 NAV-data -->
+        <p><strong>Antal NAV-kurser:</strong> @Model.NavSummary.TotalCourses</p>
+        <p><strong>Period:</strong> @(((DateTime?)Model.NavSummary.StartDate)?.ToString("yyyy-MM-dd") ?? "") -
+            @(((DateTime?)Model.NavSummary.EndDate)?.ToString("yyyy-MM-dd") ?? "")</p>
+    </div>
+
+    <!-- 📊 Lista NAV-kurser -->
+    <div class="card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">NAV-kurser</h5>
+
+            <div class="d-flex gap-2">
+                <!-- 🔍 Filter-knapp -->
+                <button id="toggleFilterButton" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-funnel"></i> Filtrera
+                </button>
+
+                <!-- 🗑️ Rensa NAV-kurser-knapp -->
+                <form method="post" asp-action="ConfirmClearNavCourses" asp-route-id="@Model.Id">
+                    <button type="submit" class="btn btn-danger btn-sm">
+                        <i class="bi bi-trash"></i> Rensa NAV-kurser
+                    </button>
+                </form>
+
+                <!-- 📥 Importera-knapp -->
+                <a asp-action="ImportNavCourses" asp-route-id="@Model.Id" class="btn btn-primary btn-sm">
+                    <i class="bi bi-upload"></i> Importera NAV-kurser
+                </a>
+            </div>
+        </div>
+
+        <!-- 🔹 Filter-sektion (döljd som standard) -->
+        <div id="filterContainer" class="card p-3 bg-light d-none">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6>Filtrera NAV-kurser</h6>
+                <button id="clearSelectedYearsButton" class="btn btn-secondary btn-sm d-none">
+                    <i class="bi bi-x"></i> Rensa filter
+                </button>
+
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <!-- Årsknappar -->
+                <div id="yearFilterContainer" class="d-flex flex-wrap gap-2">
+                    @foreach (var year in Model.AvailableYears)
+                    {
+                        <button type="button" class="btn btn-outline-primary btn-sm year-button"
+                            data-year="@year">@year</button>
+                    }
+                </div>
+
+                <div class="w-100"></div>
+
+                <div id="selectedYearsDisplay" class="d-flex flex-wrap gap-2"></div>
+            </div>
+        </div>
+
+        <table class="table table-bordered mt-3">
+            <thead>
+                <tr>
+                    <th>Fond</th>
+                    <th>Kurs</th>
+                    <th>Valuta</th>
+                    <th>Datum</th>
+                </tr>
+            </thead>
+            <tbody id="dataContainer">
+                @foreach (var navCourse in Model.NavCourses)
+                {
+                    <tr>
+                        <td>@navCourse.FundName</td>
+                        <td>@navCourse.NavValue.ToString("N2")</td>
+                        <td>@navCourse.Currency</td>
+                        <td>@navCourse.Date</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <!-- 🔹 Loader som visas vid scroll -->
+        <div id="loadingIndicator" class="text-center d-none">
+            <span class="spinner-border text-primary" role="status"></span>
+            <p>Laddar fler NAV-kurser...</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // 📌 Få fondens ID från Razor
+            const fundId = @Html.Raw(Model.Id);
+            if (!fundId) {
+                console.error("⚠️ fundId saknas! Kontrollera att @Model.Id är tillgängligt.");
+                return;
+            }
+
+            // 📌 Grundläggande variabler
+            const dataContainer = document.querySelector("#dataContainer");
+            const noDataMessage = document.querySelector("#noDataMessage");
+            const selectedYearsContainer = document.querySelector("#selectedYearsContainer");
+            const clearSelectedYearsButton = document.querySelector("#clearSelectedYearsButton");
+            const filterContainer = document.querySelector("#filterContainer");
+            const toggleFilterButton = document.querySelector("#toggleFilterButton");
+            const loadingIndicator = document.querySelector("#loadingIndicator");
+            const yearButtons = document.querySelectorAll(".year-button");
+
+            const editButton = document.getElementById("edit-button");
+            const saveButton = document.getElementById("save-button");
+            const cancelButton = document.getElementById("cancel-button");
+
+            const actionButtons = document.getElementById("action-buttons");
+            const editButtons = document.getElementById("edit-buttons");
+
+            const nameDisplay = document.getElementById("name-display");
+            const nameInput = document.getElementById("name-input");
+
+            const currencyDisplay = document.getElementById("currency-display");
+            const currencyInput = document.getElementById("currency-input");
+
+
+            let isEditingFund = false;
+            let selectedYears = new Set();
+            let pageNumber = 1;
+            const pageSize = 50;
+            let isLoading = false;
+            let hasMoreData = true;
+
+            if (editButton) {
+                editButton.addEventListener("click", () => toggleFundEdit(true));
+                cancelButton.addEventListener("click", () => toggleFundEdit(false));
+                saveButton.addEventListener("click", () => saveFundChanges());
+            }
+
+            // ========================== 🟢 INLINE EDIT ==========================
+
+            function toggleFundEdit(editMode) {
+                if (editMode) {
+                    isEditingFund = true;
+                    document.addEventListener("keydown", handleFundKeyEvents);
+
+                    nameInput.value = nameDisplay.textContent.trim();
+                    currencyInput.value = currencyDisplay.textContent.trim();
+
+                    nameDisplay.classList.add("d-none");
+                    nameInput.classList.remove("d-none");
+
+                    currencyDisplay.classList.add("d-none");
+                    currencyInput.classList.remove("d-none");
+
+                    actionButtons.classList.add("d-none");
+                    editButtons.classList.remove("d-none");
+                } else {
+                    isEditingFund = false;
+                    document.removeEventListener("keydown", handleFundKeyEvents);
+                    resetFundEdit();
+                }
+            }
+
+            function resetFundEdit() {
+                nameDisplay.classList.remove("d-none");
+                nameInput.classList.add("d-none");
+
+                currencyDisplay.classList.remove("d-none");
+                currencyInput.classList.add("d-none");
+
+                actionButtons.classList.remove("d-none");
+                editButtons.classList.add("d-none");
+            }
+
+            function saveFundChanges() {
+                const newName = nameInput.value;
+                const newCurrency = currencyInput.value;
+                const fundId = @Model.Id;
+
+                fetch(`/funds/${fundId}/edit`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRF-TOKEN": document.querySelector("input[name='__RequestVerificationToken']").value
+                    },
+                    body: JSON.stringify({ id: fundId, name: newName, currency: newCurrency })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            nameDisplay.textContent = data.name;
+                            currencyDisplay.textContent = data.currency;
+
+                            toggleFundEdit(false);
+                            fetchStatusMessages();
+                            fetchBreadcrumbs(fundId, newName, "Fund", "Fonder");
+                        } else {
+                            sendStatusMessage("danger", data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Fel vid uppdatering:", error);
+                        sendStatusMessage("error", "Något gick fel vid uppdateringen.");
+                    });
+            }
+
+            function handleFundKeyEvents(event) {
+                if (event.key === "Escape") toggleFundEdit(false);
+                if (event.key === "Enter") saveFundChanges();
+            }
+
+            // 📌 Kontrollera att alla element finns innan fortsättning
+            if (!dataContainer) {
+                console.error("⚠️ Kritiskt: dataContainer saknas. Scriptet kan inte köra.");
+                return;
+            }
+
+            toggleFilterButton.addEventListener("click", function () {
+                filterContainer.classList.toggle("d-none");
+            });
+
+
+            // ========================== 🟢 INITIERA ==========================
+            function initNavCourseLoader() {
+                initFilters();
+                loadData(true); // Ladda första sidans data
+                window.addEventListener("scroll", handleScroll);
+            }
+
+            // ========================== 🔹 HÄMTA DATA ==========================
+            async function loadData(reset = false) {
+                if (isLoading || !hasMoreData) return;
+                isLoading = true;
+
+                if (reset) {
+                    pageNumber = 1;
+                    dataContainer.innerHTML = "";
+                    hasMoreData = true;
+                }
+
+                // 🔹 Visa loader
+                if (loadingIndicator) loadingIndicator.classList.remove("d-none");
+
+                const selectedYearsArray = Array.from(selectedYears).join(",");
+                const response = await fetch(`/funds/${fundId}/navcourses?pageNumber=${pageNumber}&pageSize=${pageSize}&years=${selectedYearsArray}`);
+
+                if (!response.ok) {
+                    console.error("⚠️ Fel vid hämtning av data", response.status);
+                    isLoading = false;
+                    return;
+                }
+
+                // 🔹 Logga hela svaret för att se vad API:t skickar
+                const result = await response.json();
+                if (!result || !result.data) {
+                    isLoading = false;
+                    return;
+                }
+
+                if (result.data.length > 0) {
+                    renderData(result.data);
+                    pageNumber++;
+                    hasMoreData = result.data.length === pageSize; // 🟢 Endast false om vi inte fick full pageSize
+                } else {
+                    hasMoreData = false;
+                    window.removeEventListener("scroll", handleScroll);
+                }
+
+                isLoading = false;
+
+                // 🔹 Dölj loader
+                if (loadingIndicator) loadingIndicator.classList.add("d-none");
+            }
+
+            // ========================== 🔹 RENDERA DATA ==========================
+            function renderData(data) {
+                if (!dataContainer) return;
+
+                dataContainer.insertAdjacentHTML(
+                    "beforeend",
+                    data.map(nav => `
+        <tr>
+            <td>${nav.fundName ?? "-"}</td>
+            <td>${Number(nav.navValue.replace(",", ".")).toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td>${nav.currency ?? "-"}</td>
+            <td>${nav.date}</td>
+        </tr>`).join("")
+                );
+
+                updateVisibility();
+            }
+
+            // ========================== 🔹 HANTERA SCROLL ==========================
+            function handleScroll() {
+                if (!isLoading && hasMoreData && (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 200) {
+                    loadData();
+                }
+            }
+
+            // ========================== 🔹 INIT FILTERS ==========================
+            function initFilters() {
+                if (!yearButtons.length) return;
+
+                yearButtons.forEach(button => {
+                    button.addEventListener("click", function () {
+                        const year = this.dataset.year;
+
+                        if (!selectedYears.has(year)) {
+                            selectedYears.add(year);
+                            createSelectedYearButton(year, button);
+                        }
+
+                        applyFilters();
+                    });
+                });
+
+                if (clearSelectedYearsButton) {
+                    clearSelectedYearsButton.addEventListener("click", function () {
+                        selectedYears.clear();
+                        document.querySelectorAll(".selected-year").forEach(btn => btn.remove());
+
+                        document.querySelectorAll(".year-button").forEach(button => {
+                            button.style.visibility = "visible";
+                        });
+
+                        applyFilters();
+                    });
+                }
+
+                if (toggleFilterButton) {
+                    toggleFilterButton.addEventListener("click", function () {
+                        toggleFilterUI();
+                    });
+                }
+            }
+            function applyFilters() {
+                pageNumber = 1;       // 🟢 Starta om från första sidan
+                hasMoreData = true;   // 🟢 Återställ så att fler data kan hämtas
+                dataContainer.innerHTML = ""; // 🟢 Töm datan innan ny hämtning
+                toggleClearButton();  // Uppdatera synlighet för "Rensa filter"
+                loadData(true);       // Hämta första sidan med de nya filtren
+            }
+            function createSelectedYearButton(year, originalButton) {
+                const selectedYearButton = document.createElement("button");
+                selectedYearButton.className = "btn btn-primary btn-sm selected-year";
+                selectedYearButton.dataset.year = year;
+                selectedYearButton.innerHTML = `${year} <i class="bi bi-x"></i>`;
+
+                // Klick för att ta bort året från filtret
+                selectedYearButton.addEventListener("click", function () {
+                    selectedYears.delete(year);
+                    this.remove();
+                    originalButton.style.visibility = "visible"; // Visa originalknappen igen
+                    applyFilters();
+                });
+
+                document.querySelector("#selectedYearsDisplay").appendChild(selectedYearButton);
+                originalButton.style.visibility = "hidden"; // Dölj originalknappen
+            }
+
+            // Anpassa eventlyssnaren för årsknappar
+            yearButtons.forEach(button => {
+                button.addEventListener("click", function () {
+                    const year = this.dataset.year;
+
+                    if (!selectedYears.has(year)) {
+                        selectedYears.add(year);
+                        createSelectedYearButton(year, button);
+                    }
+
+                    applyFilters();
+                });
+            });
+
+            function toggleClearButton() {
+                const clearButton = document.querySelector("#clearSelectedYearsButton");
+                if (!clearButton) return; // 🚀 Säkerställ att scriptet inte kraschar
+                clearButton.classList.toggle("d-none", selectedYears.size === 0);
+            }
+
+            // ========================== 🔹 UI-FUNKTIONER ==========================
+            function updateVisibility() {
+                if (noDataMessage) {
+                    noDataMessage.classList.toggle("d-none", dataContainer.children.length > 0);
+                }
+            }
+
+            function toggleFilterUI() {
+                filterContainer.classList.toggle("d-none");
+                toggleFilterButton.blur();
+            }
+
+            // 🔹 Starta filtreringen
+            initFilters();
+
+            // ========================== 🟢 STARTA ==========================
+            initNavCourseLoader();
+
+            function sendStatusMessage(type, message) {
+                fetch("/utility/status-message", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "X-CSRF-TOKEN": document.querySelector("input[name='__RequestVerificationToken']").value
+                    },
+                    body: `type=${encodeURIComponent(type)}&message=${encodeURIComponent(message)}`
+                })
+                    .then(() => fetchStatusMessages())
+                    .catch(error => console.error("Fel vid statusmeddelande:", error));
+            }
+
+            function fetchStatusMessages() {
+                fetch("/utility/status-message")
+                    .then(response => response.text())
+                    .then(html => {
+                        const alertContainer = document.getElementById("status-messages-container");
+                        if (alertContainer) alertContainer.innerHTML = html;
+                    })
+                    .catch(error => console.error("Fel vid hämtning av statusmeddelanden:", error));
+            }
+
+            function fetchBreadcrumbs(reportId, customActionTitle, controller, customControllerTitle) {
+                fetch(`/utility/breadcrumbs/update?id=${reportId}&customActionTitle=${encodeURIComponent(customActionTitle)}&controller=${encodeURIComponent(controller)}&customControllerTitle=${encodeURIComponent(customControllerTitle)}`)
+                    .then(response => response.text())
+                    .then(html => {
+                        document.getElementById("breadcrumbs-container").innerHTML = html;
+                    })
+                    .catch(error => console.error("Fel vid hämtning av breadcrumbs:", error));
+            }
+        });
+    </script>

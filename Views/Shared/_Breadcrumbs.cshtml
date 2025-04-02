@@ -1,0 +1,28 @@
+@using GlobalInvest.Services
+@if (ViewData["Breadcrumbs"] is List<BreadcrumbItem> breadcrumbs && breadcrumbs.Any())
+{
+    <div class="container mt-3">
+        <nav aria-label="breadcrumb" class="mb-3">
+            <h1 class="breadcrumb-title">
+                @for (int i = 0; i < breadcrumbs.Count; i++)
+                {
+                    var crumb = breadcrumbs[i];
+                    bool isLast = i == breadcrumbs.Count - 1; // Sista breadcrumb
+
+                    if (isLast)
+                    {
+                        <span class="active-breadcrumb">@crumb.Title</span>
+                    }
+                    else
+                    {
+                        <a asp-controller="@crumb.Controller" asp-action="@crumb.Action"
+                            asp-all-route-data="@(crumb.RouteValues?.ToDictionary(k => k.Key, k => k.Value?.ToString() ?? "") ?? new Dictionary<string, string>())">
+                            @crumb.Title
+                        </a>
+                        <span class="breadcrumb-separator"> / </span>
+                    }
+                }
+            </h1>
+        </nav>
+    </div>
+}

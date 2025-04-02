@@ -1,0 +1,42 @@
+<!-- 🛑 Global bekräftelsemodal -->
+@if (TempData["ModalActionUrl"] != null)
+{
+    <div class="modal fade show" id="globalConfirmModal" tabindex="-1" role="dialog" style="display: block;"
+        aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <!-- 🔹 Modal Header -->
+                <div class="modal-header">
+                    <h5 class="modal-title">@TempData["ModalTitle"]</h5>
+                    <a href="@(TempData["ReturnUrl"] ?? "/")" class="btn-close" aria-label="Close"></a>
+                </div>
+
+                <!-- 🔹 Modal Body -->
+                <div class="modal-body">
+                    @if (TempData["ModalPartialView"] != null)
+                    {
+                        @await Html.PartialAsync(TempData["ModalPartialView"].ToString())
+                    }
+                    else
+                    {
+                        <p>@TempData["ModalBody"]</p>
+                    }
+                </div>
+
+                <!-- 🔹 Modal Footer -->
+                <div class="modal-footer">
+                    <a href="@(TempData["ReturnUrl"] ?? "/")" class="btn btn-secondary text-white">
+                        @(TempData["SecondaryButtonText"] ?? "Avbryt")
+                    </a>
+                    <form method="post" action="@TempData["ModalActionUrl"]" style="display:inline;">
+                        <input type="hidden" name="returnUrl" value="@TempData["SuccessReturnUrl"]" />
+                        <button type="submit" class="btn @TempData["PrimaryButtonColor"]">
+                            @TempData["PrimaryButtonText"]
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}

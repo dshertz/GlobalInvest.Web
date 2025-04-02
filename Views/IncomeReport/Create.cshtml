@@ -1,0 +1,31 @@
+@model GlobalInvest.ViewModels.IncomeReportViewModel
+
+@{
+    ViewData["Title"] = "Lägg till ny inkomstuppgift";
+}
+
+<div class="container">
+    <form asp-action="Create" method="post">
+        <div class="mb-3">
+            <label asp-for="Name" class="form-label">Namn</label>
+            <input asp-for="Name" class="form-control" required />
+            <span asp-validation-for="Name" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="Currency" class="form-label">Valuta</label>
+            <select asp-for="Currency" class="form-control">
+                @foreach (var currency in Model.AvailableCurrencies)
+                {
+                    <option value="@currency">@currency</option>
+                }
+            </select>
+            <span asp-validation-for="Currency" class="text-danger"></span>
+        </div>
+
+        <div class="d-flex justify-content-center gap-2 mt-3">
+            <a asp-action="Index" class="btn btn-secondary">Avbryt</a>
+            <button type="submit" class="btn btn-success">Spara</button>
+        </div>
+    </form>
+</div>

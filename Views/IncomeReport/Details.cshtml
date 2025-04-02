@@ -1,0 +1,401 @@
+@model GlobalInvest.ViewModels.IncomeReportViewModel
+
+@{
+    ViewData["Title"] = "Detaljer för inkomstrapport";
+}
+
+<div class="container my-5">
+    <div class="card p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Översikt</h5>
+            <div id="action-buttons" class="d-flex gap-2">
+                <!-- 🗑️ Ta bort-knapp -->
+                <form method="post" asp-action="ConfirmDelete" asp-route-id="@Model.Id" asp-route-returnAction="Index"
+                    asp-route-cancelAction="Details">
+                    <button type="submit" class="btn btn-danger btn-sm delete-button">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </form>
+                <!-- 📝 Redigera-knapp -->
+                <button id="edit-button" class="btn btn-warning btn-sm">
+                    <i class="bi bi-pencil"></i> Redigera
+                </button>
+            </div>
+
+            <!-- 🔹 Spara & Avbryt-knappar (gömd som standard) -->
+            <div id="edit-buttons" class="d-flex gap-2 d-none">
+                <button id="cancel-button" class="btn btn-secondary btn-sm">
+                    <i class="bi bi-x"></i> Avbryt
+                </button>
+                <button id="save-button" class="btn btn-success btn-sm">
+                    <i class="bi bi-check"></i> Spara
+                </button>
+            </div>
+        </div>
+
+        <!-- 📝 Inline-edit för Namn -->
+        <p><strong>Namn:</strong>
+            <span id="name-display">@Model.Name</span>
+            <input type="text" id="name-input" class="edit-input d-none" value="@Model.Name"
+                oninput="this.style.width = ((this.value.length + 1) * 9) + 'px';">
+        </p>
+
+        <!-- 💰 Inline-edit för Valuta -->
+        <p><strong>Valuta:</strong>
+            <span id="currency-display">@Model.Currency</span>
+            <!-- tillfälligt hårdkodat  -->
+            <select id="currency-input" class="edit-input d-none">
+                <option value="SEK" selected="@("SEK" == Model.Currency)">SEK</option>
+                <option value="EUR" selected="@("EUR" == Model.Currency)">EUR</option>
+                <option value="USD" selected="@("USD" == Model.Currency)">USD</option>
+            </select>
+        </p>
+
+        <p><strong>Antal taxeringsuppgifter:</strong> @Model.TaxSummaries.Count</p>
+    </div>
+
+    <!-- 📊 Lista taxeringsuppgifter -->
+    <div class="card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Taxeringsuppgifter</h5>
+
+            <div class="d-flex gap-2">
+
+                <button id="cancel-tax-button" class="btn btn-secondary btn-sm d-none">
+                    <i class="bi bi-x"></i> Avbryt
+                </button>
+                <button id="save-tax-button" class="btn btn-success btn-sm d-none">
+                    <i class="bi bi-check"></i> Spara
+                </button>
+
+                <!-- 🗑️ Rensa taxeringsuppgifter-knapp -->
+                <form method="post" asp-action="ConfirmClearTaxSummaries" asp-route-id="@Model.Id">
+                    <button id="clear-tax-button" type="submit" class="btn btn-danger btn-sm">
+                        <i class="bi bi-trash"></i> Rensa taxeringsuppgifter
+                    </button>
+                </form>
+
+                <!-- 📥 Importera-knapp -->
+                <a id="import-tax-button" asp-action="ImportTaxSummaries" asp-route-id="@Model.Id"
+                    class="btn btn-primary btn-sm">
+                    <i class="bi bi-upload"></i> Importera taxeringsuppgifter
+                </a>
+                <button id="edit-tax-button" class="btn btn-warning btn-sm">
+                    <i class="bi bi-pencil"></i> Redigera
+                </button>
+            </div>
+        </div>
+
+    @if (Model.TaxSummaries.Any())
+    {
+                <table class="table table-bordered mt-3">
+                    <thead>
+                        <tr>
+                            <th>År</th>
+                            <th>Överskott av tjänst</th>
+                            <th>Slutlig skatt</th>
+                            <th>Disponibel inkomst</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        @foreach (var tax in Model.TaxSummaries)
+        {
+                            <tr data-tax-id="@tax.Id">
+                                <td>
+                                    <span class="tax-display">@tax.IncomeYear</span>
+                                    <input type="number" class="tax-edit d-none form-control year-input" value="@tax.IncomeYear" />
+                                </td>
+                                <td>
+                                    <span class="tax-display">@tax.EmploymentIncome.ToString("N0")</span>
+                                    <input type="number" class="tax-edit d-none form-control" value="@tax.EmploymentIncome" />
+                                </td>
+                                <td>
+                                    <span class="tax-display">@tax.FinalTax.ToString("N0")</span>
+                                    <input type="number" class="tax-edit d-none form-control" value="@tax.FinalTax" />
+                                </td>
+                                <td>
+                                    <span class="tax-display">@tax.DisposableIncome.ToString("N0")</span>
+                                </td>
+                            </tr>
+                        }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class=" text-muted">Inga taxeringsuppgifter tillgängliga.</p>
+        }
+</div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // 🎯 Inline Edit för inkomstrapport
+            const editButton = document.getElementById("edit-button");
+            const saveButton = document.getElementById("save-button");
+            const cancelButton = document.getElementById("cancel-button");
+
+            const actionButtons = document.getElementById("action-buttons");
+            const editButtons = document.getElementById("edit-buttons");
+
+            const nameDisplay = document.getElementById("name-display");
+            const nameInput = document.getElementById("name-input");
+
+            const currencyDisplay = document.getElementById("currency-display");
+            const currencyInput = document.getElementById("currency-input");
+
+            let isEditingIncomeReport = false;
+            let isEditingTaxSummaries = false;
+
+            let updatedTaxes = [];
+
+            if (editButton) {
+                editButton.addEventListener("click", () => {
+                    if (isEditingTaxSummaries) {
+                        sendStatusMessage("warning", "Du redigerar redan taxeringsuppgifter.");
+                        return;
+                    }
+                    toggleIncomeEdit(true);
+                });
+                cancelButton.addEventListener("click", () => toggleIncomeEdit(false));
+                saveButton.addEventListener("click", () => saveChanges());
+            }
+
+            function toggleIncomeEdit(editMode) {
+                if (editMode) {
+                    if (isEditingTaxSummaries) {
+                        sendStatusMessage("warning", "Du redigerar redan taxeringsuppgifter.");
+                        return;
+                    }
+                    isEditingIncomeReport = true;
+                    document.addEventListener("keydown", handleIncomeKeyEvents);
+
+                    // Läs in värden direkt från spans
+                    nameInput.value = nameDisplay.textContent.trim();
+                    currencyInput.value = currencyDisplay.textContent.trim();
+
+
+                    nameDisplay.classList.add("d-none");
+                    nameInput.classList.remove("d-none");
+
+                    currencyDisplay.classList.add("d-none");
+                    currencyInput.classList.remove("d-none");
+
+                    actionButtons.classList.add("d-none");
+                    editButtons.classList.remove("d-none");
+                } else {
+                    isEditingIncomeReport = false;
+                    resetIncomeEdit();
+                    document.removeEventListener("keydown", handleIncomeKeyEvents);
+                }
+            }
+
+            function resetIncomeEdit() {
+                nameDisplay.classList.remove("d-none");
+                nameInput.classList.add("d-none");
+
+                currencyDisplay.classList.remove("d-none");
+                currencyInput.classList.add("d-none");
+
+                actionButtons.classList.remove("d-none");
+                editButtons.classList.add("d-none");
+            }
+
+            function saveChanges() {
+                const newName = nameInput.value;
+                const newCurrency = currencyInput.value;
+                const reportId = @Model.Id;
+
+                fetch(`/income-reports/${reportId}/edit`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRF-TOKEN": document.querySelector("input[name='__RequestVerificationToken']").value
+                    },
+                    body: JSON.stringify({ id: reportId, name: newName, currency: newCurrency })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            nameDisplay.textContent = data.name;
+                            currencyDisplay.textContent = data.currency;
+
+                            toggleIncomeEdit(false);
+                            fetchStatusMessages();
+                            fetchBreadcrumbs(reportId, newName, "IncomeReport", "Inkomster");
+                        } else {
+                            sendStatusMessage("danger", data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Fel vid uppdatering:", error);
+                        sendStatusMessage("danger", "Något gick fel vid uppdateringen.");
+                    });
+            }
+
+            // 🎯 Inline Edit för taxeringsuppgifter
+            const editTaxButton = document.getElementById("edit-tax-button");
+            const saveTaxButton = document.getElementById("save-tax-button");
+            const cancelTaxButton = document.getElementById("cancel-tax-button");
+
+            if (editTaxButton) {
+                editTaxButton.addEventListener("click", () => {
+                    if (isEditingIncomeReport) {
+                        sendStatusMessage("warning", "Du redigerar redan inkomstrapporten.");
+                        return;
+                    }
+                    toggleTaxEdit(true);
+                });
+                cancelTaxButton.addEventListener("click", () => toggleTaxEdit(false));
+                saveTaxButton.addEventListener("click", () => saveTaxSummaries());
+            }
+            function toggleTaxEdit(editMode) {
+                if (!editTaxButton || !saveTaxButton || !cancelTaxButton) {
+                    console.error("Knappar saknas i DOM:en.");
+                    return;
+                }
+                if (editMode) {
+                    if (isEditingIncomeReport) {
+                        sendStatusMessage("warning", "Du redigerar redan inkomstrapporten.");
+                        return;
+                    }
+                    isEditingTaxSummaries = true;
+                    document.addEventListener("keydown", handleTaxKeyEvents);
+
+                    document.querySelectorAll(".tax-display").forEach(el => el.classList.add("d-none"));
+                    document.querySelectorAll(".tax-edit").forEach(el => el.classList.remove("d-none"));
+
+document.querySelectorAll("tbody tr").forEach((row, index) => {
+    const displays = row.querySelectorAll(".tax-display");
+    const inputs = row.querySelectorAll(".tax-edit");
+
+    if (displays.length < 4 || inputs.length < 3) {
+        console.error(`Fel: Saknade tax-display eller tax-edit i rad ${index}.`);
+        return;
+    }
+
+    
+    // ✅ Uppdatera `updatedTaxes` från DOM innan redigering
+    updatedTaxes[index] = {
+        incomeYear: parseInt(displays[0].textContent.trim(), 10),
+        employmentIncome: parseFloat(displays[1].textContent.replace(/\s+/g, '')),
+        finalTax: parseFloat(displays[2].textContent.replace(/\s+/g, ''))
+    };
+
+    // ✅ Fyll i inputs baserat på vad som faktiskt finns i DOM
+    inputs[0].value = updatedTaxes[index].incomeYear;
+    inputs[1].value = updatedTaxes[index].employmentIncome;
+    inputs[2].value = updatedTaxes[index].finalTax;
+});
+                } else {
+                    isEditingTaxSummaries = false;
+                    resetTaxEdit();
+                    document.removeEventListener("keydown", handleTaxKeyEvents);
+                }
+
+                // 🔥 Toggla edit/save/cancel-knappar
+                editTaxButton.classList.toggle("d-none", editMode);
+                saveTaxButton.classList.toggle("d-none", !editMode);
+                cancelTaxButton.classList.toggle("d-none", !editMode);
+
+                // 🔥 Dölj Rensa- och Importera-knappar vid edit
+                document.getElementById("clear-tax-button").classList.toggle("d-none", editMode);
+                document.getElementById("import-tax-button").classList.toggle("d-none", editMode);
+            }
+            function resetTaxEdit() {
+                document.querySelectorAll(".tax-display").forEach(el => el.classList.remove("d-none"));
+                document.querySelectorAll(".tax-edit").forEach(el => el.classList.add("d-none"));
+            }
+
+            function saveTaxSummaries() {
+                const reportId = @Model.Id;
+                updatedTaxes = [];
+
+                document.querySelectorAll("tbody tr").forEach(row => {
+                    const taxId = row.getAttribute("data-tax-id");
+                    const inputs = row.querySelectorAll(".tax-edit");
+
+                    updatedTaxes.push({
+                        id: parseInt(taxId, 10),
+                        incomeYear: parseInt(inputs[0].value, 10),
+                        employmentIncome: parseFloat(inputs[1].value),
+                        finalTax: parseFloat(inputs[2].value)
+                    });
+                });
+
+                fetch(`/income-reports/${reportId}/taxsummaries/update`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRF-TOKEN": document.querySelector("input[name='__RequestVerificationToken']").value
+                    },
+                    body: JSON.stringify(updatedTaxes)
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            document.querySelectorAll("tbody tr").forEach((row, index) => {
+                                const displays = row.querySelectorAll(".tax-display");
+
+                                displays[0].textContent = updatedTaxes[index].incomeYear; // Uppdatera IncomeYear
+                                displays[1].textContent = updatedTaxes[index].employmentIncome.toLocaleString("sv-SE");
+                                displays[2].textContent = updatedTaxes[index].finalTax.toLocaleString("sv-SE");
+
+                                const newDisposableIncome = updatedTaxes[index].employmentIncome - updatedTaxes[index].finalTax;
+                                displays[3].textContent = newDisposableIncome.toLocaleString("sv-SE");
+                            });
+
+                            toggleTaxEdit(false);
+                            fetchStatusMessages();
+                        } else {
+                            sendStatusMessage("danger", data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Fel vid uppdatering:", error);
+                        sendStatusMessage("danger", "Något gick fel vid uppdateringen.");
+                    });
+            }
+            function sendStatusMessage(type, message) {
+                fetch("/utility/status-message", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "X-CSRF-TOKEN": document.querySelector("input[name='__RequestVerificationToken']").value
+                    },
+                    body: `type=${encodeURIComponent(type)}&message=${encodeURIComponent(message)}`
+                })
+                    .then(() => fetchStatusMessages())
+                    .catch(error => console.error("Fel vid statusmeddelande:", error));
+            }
+
+            function handleIncomeKeyEvents(event) {
+                if (event.key === "Escape") toggleIncomeEdit(false);
+                if (event.key === "Enter") saveChanges();
+            }
+
+            function handleTaxKeyEvents(event) {
+                if (event.key === "Escape") toggleTaxEdit(false);
+                if (event.key === "Enter") saveTaxSummaries();
+            }
+
+            function fetchStatusMessages() {
+                fetch("/utility/status-message")
+                    .then(response => response.text())
+                    .then(html => {
+                        const alertContainer = document.getElementById("status-messages-container");
+                        if (alertContainer) alertContainer.innerHTML = html;
+                    })
+                    .catch(error => console.error("Fel vid hämtning av statusmeddelanden:", error));
+            }
+
+            function fetchBreadcrumbs(reportId, customActionTitle, controller, customControllerTitle) {
+                fetch(`/utility/breadcrumbs/update?id=${reportId}&customActionTitle=${encodeURIComponent(customActionTitle)}&controller=${encodeURIComponent(controller)}&customControllerTitle=${encodeURIComponent(customControllerTitle)}`)
+                    .then(response => response.text())
+                    .then(html => {
+                        document.getElementById("breadcrumbs-container").innerHTML = html;
+                    })
+                    .catch(error => console.error("Fel vid hämtning av breadcrumbs:", error));
+            }
+
+        });
+    </script>

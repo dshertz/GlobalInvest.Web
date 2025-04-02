@@ -1,0 +1,483 @@
+@model GlobalInvest.ViewModels.Calculations.CalculationViewModel
+
+@{
+    ViewData["Title"] = "Beräkningar";
+}
+
+<div class="container my-5">
+    <!-- 🔹 Välj inkomstrapport -->
+    <form id="calculationForm" method="get" asp-action="Index">
+        <div class="mb-3">
+            <label for="SelectedIncomeReportId" class="form-label">Inkomstrapport:</label>
+            <select asp-for="SelectedIncomeReportId" class="form-select" onchange="this.form.submit()">
+                <option value="">-- Välj en rapport --</option>
+                @foreach (var report in Model.IncomeReports)
+                {
+                            <option value="@report.Id">@report.Name</option>
+                }
+            </select>
+        </div>
+        <div class="mb-3">
+    <label for="SelectedFundId" class="form-label">Fond:</label>
+    <select asp-for="SelectedFundId" class="form-select" onchange="this.form.submit()">
+        <option value="">-- Välj en fond --</option>
+        @foreach (var fund in Model.Funds)
+        {
+                    <option value="@fund.Id">@fund.Name</option>
+        }
+    </select>
+</div>
+<div class="mb-3">
+    <label for="InvestmentDay" class="form-label">Investeringsdag:</label>
+    <select asp-for="InvestmentDay" class="form-select" onchange="this.form.submit()">
+        @for (int day = 1; day <= 28; day++)
+        {
+                    <option value="@day">@day</option>
+        }
+    </select>
+</div>
+
+        <!-- 🔹 Investeringskvot -->
+       <div class="mb-3">
+    <label for="InvestmentPercentage" class="form-label">Investeringskvot (%):</label>
+    <input asp-for="InvestmentPercentage" id="investmentPercentage" type="number" 
+           class="form-control" step="1" min="0" max="100" onfocus="placeCursorAtEnd(this)"
+           oninput="debounceUpdateInvestmentResults()" 
+           data-original-value="@Model.InvestmentPercentage">
+</div>
+    </form>
+@{
+    var selectedReport = Model.IncomeReports.FirstOrDefault(r => r.Id == Model.SelectedIncomeReportId);
+}
+
+
+@if (Model.SelectedIncomeReportId != null && Model.SelectedFundId != null)
+{
+    if (selectedReport != null)
+    {
+                <h4>Detaljer för: @selectedReport.Name</h4>
+
+                <!-- 🔹 Filtersektion -->
+                <div class="mb-3">
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#filterSection">
+                        <i class="bi bi-funnel"></i> Filtrera
+                    </button>
+                </div>
+
+                <div id="filterSection" class="collapse">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="showAllYearsCheckbox">
+                        <label class="form-check-label" for="showAllYearsCheckbox">
+                            Visa alla år (inkl. år utan NAV-kurser)
+                        </label>
+                    </div>
+                </div>
+
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Inkludera</th>
+                                        <th>Inkomstår</th>
+                                        <th>Disponibel årsinkomst <span>@selectedReport.Currency</span></th>
+                                        <th>Disponibel månadsinkomst <span>@selectedReport.Currency</span></th>
+                                        <th>Nav-år tillgängligt</th>
+                                        <th>Investeringskvot %</th>
+                                        <th>Beräknad månadsinvestering <span>@selectedReport.Currency</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var tax in selectedReport.TaxSummaries)
+                                    {
+                                                // Om året saknar NAV-kurser, ge den en klass för att dölja den som standard
+                                    var rowClass = Model.NavYears.Contains(tax.IncomeYear) ? "" : "year-no-data d-none";
+
+                                    <tr class="@rowClass">
+                                                    <td>
+                                                        <input type="checkbox" class="year-checkbox"
+                                                   data-year="@tax.IncomeYear" @(tax.IsSelected ? "checked" : "") />
+                                                    </td>
+                                                    <td>@tax.IncomeYear</td>
+                                                    <td>@tax.DisposableIncome.ToString("N0")</td>
+                                                    <td class="monthly-disposable-income" data-value="@tax.MonthlyDisposableIncome">
+                                                        @tax.MonthlyDisposableIncome.ToString("N0")</td>
+                                                    <td>
+                                                        @if (Model.NavYears.Contains(tax.IncomeYear))
+                                                        {
+                                                                    <span class="text-success">Ja</span>
+                                                        }
+                                                        else
+                                                        {
+                                                                    <span class="text-danger">Nej</span>
+                                                        }
+                                                    </td>
+                                                    <td>@Model.InvestmentPercentage</td>
+                                                    <td class="investment-value">
+                                                        @tax.MonthlyInvestment(Model.InvestmentPercentage).ToString("C0")
+                                                    </td>
+                                                </tr>
+                                    }
+                                </tbody>
+                            </table>
+    }
+}
+@if (Model.SelectedIncomeReportId != null && Model.InvestmentResults.Any())
+{
+        <h4>Investeringssimulering</h4>
+
+    <div class="card p-3 mb-4">
+        <canvas id="investmentChart"></canvas>
+    </div>
+
+    <!-- 🔹 Sammanfattning av senaste datapunkt -->
+    <div class="mt-4">
+        @{
+                var last = Model.InvestmentResults.LastOrDefault();
+        }
+
+        @if (last != null)
+        {
+                <h5>Simulerat slutresultat</h5>
+                <table class="table table-bordered mt-3">
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Totalt portföljvärde (@selectedReport.Currency)</th>
+                            <th>Vinst (@selectedReport.Currency)</th>
+                            <th>Vinst (%)</th>
+                            <th>Totalt investerat (@selectedReport.Currency)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>@last.InvestmentDate</td>
+                            <td>@last.TotalPortfolioValue.ToString("N0")</td>
+                            <td class="@(last.Profit < 0 ? "text-danger" : "")">@last.Profit.ToString("N0")</td>
+                            <td class="@(last.ProfitPercentage < 0 ? "text-danger" : "")">@last.ProfitPercentage.ToString("N0")%</td>
+                            <td>@last.TotalInvested.ToString("N0")</td>
+                        </tr>
+                    </tbody>
+                </table>
+        }
+    </div>
+
+        <h5 class="card-title">Detaljerad tabell</h5>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Inkomstår</th>
+                    <th>Månadsinkomst <span>@selectedReport.Currency</span></th>
+                    <th>Månadsinvestering <span>@selectedReport.Currency</span></th>
+                    <th>Investeringsdatum</th>
+                    <th>NAV-kurs</th>
+                    <th>Köpta andelar</th>
+                    <th>Totalt antal andelar</th>
+                    <th>Totalt portföljvärde <span>@selectedReport.Currency</span></th>
+                    <th>Vinst <span>@selectedReport.Currency</span></th>
+                    <th>Vinst (%)</th>
+                    <th>Totalt investerat <span>@selectedReport.Currency</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var investment in Model.InvestmentResults)
+                {
+                        <tr>
+                            <td>@investment.IncomeYear</td>
+                            <td>@investment.MonthlyDisposableIncome.ToString("N0")</td>                        
+                            <td>@investment.MonthlyInvestment.ToString("N0")</td>
+                            <td>@investment.InvestmentDate</td>
+                            <td>@investment.NavValue.ToString("N2")</td>
+                            <td>@investment.SharesBought.ToString("N2")</td>
+                            <td>@investment.TotalShares.ToString("N2")</td>
+                            <td>@investment.TotalPortfolioValue.ToString("N0")</td>
+                            <td>
+                                @if (investment.Profit < 0)
+                                {
+                                        <span class="text-danger">@investment.Profit.ToString("N0")</span>
+                                }
+                                else
+                                {
+                                        <span>@investment.Profit.ToString("N0")</span>
+                                }
+                            </td>
+                            <td>
+                                @if (investment.ProfitPercentage < 0)
+                                {
+                                        <span class="text-danger">@investment.ProfitPercentage.ToString("N0")</span>
+                                }
+                                else
+                                {
+                                        <span>@investment.ProfitPercentage.ToString("N0")</span>
+                                }
+                            </td>
+                            <td>@investment.TotalInvested.ToString("N0")</td>
+                        </tr>
+                }
+            </tbody>
+        </table>
+}
+
+<script>
+    function saveState() {
+        localStorage.setItem("calc.SelectedIncomeReportId", document.getElementById("SelectedIncomeReportId")?.value || "");
+        localStorage.setItem("calc.SelectedFundId", document.getElementById("SelectedFundId")?.value || "");
+        localStorage.setItem("calc.InvestmentDay", document.getElementById("InvestmentDay")?.value || "");
+        localStorage.setItem("calc.InvestmentPercentage", document.getElementById("investmentPercentage")?.value || "");
+    }
+
+    function loadState() {
+        const incomeReportSelect = document.getElementById("SelectedIncomeReportId");
+        const fundSelect = document.getElementById("SelectedFundId");
+        const daySelect = document.getElementById("InvestmentDay");
+        const percentageInput = document.getElementById("investmentPercentage");
+
+        const savedReportId = localStorage.getItem("calc.SelectedIncomeReportId");
+        const savedFundId = localStorage.getItem("calc.SelectedFundId");
+        const savedDay = localStorage.getItem("calc.InvestmentDay");
+        const savedPercentage = localStorage.getItem("calc.InvestmentPercentage");
+
+        if (incomeReportSelect && savedReportId) incomeReportSelect.value = savedReportId;
+        if (fundSelect && savedFundId) fundSelect.value = savedFundId;
+        if (daySelect && savedDay) daySelect.value = savedDay;
+        if (percentageInput && savedPercentage) percentageInput.value = savedPercentage;
+
+        if (
+            savedReportId && savedFundId && savedDay && savedPercentage &&
+            !sessionStorage.getItem("calc.LoadedOnce")
+        ) {
+            console.log("📤 Skickar formulär automatiskt...");
+            sessionStorage.setItem("calc.LoadedOnce", "true");
+            document.getElementById("calculationForm")?.submit();
+        }
+    }
+
+    function placeCursorAtEnd(input) {
+        setTimeout(() => {
+            const value = input.value;
+            input.type = "text";
+            input.value = "";
+            input.value = value;
+            input.type = "number";
+        }, 10);
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const investmentPercentageInput = document.getElementById("investmentPercentage");
+        const investmentDayInput = document.getElementById("InvestmentDay");
+        const showAllYearsCheckbox = document.getElementById("showAllYearsCheckbox");
+        const yearCheckboxes = document.querySelectorAll(".year-checkbox");
+        let debounceTimeout;
+
+        // 🟢 Hämta investeringsresultat och Fire-mål från backend vid sidladdning
+    const investmentResultsData = @Html.Raw(Json.Serialize(Model.InvestmentResults));
+    const fireTargetDate = @Html.Raw(Json.Serialize(Model.FireTargetDate));
+    const fireTargetValue = @Html.Raw(Json.Serialize(Model.FireTargetValue));
+
+    // 🟢 Kolla om vi har data att rita upp grafen direkt
+    if (investmentResultsData && investmentResultsData.length > 0) {
+        console.log("✅ Investeringsresultat finns redan, ritar graf...");
+        updateChart({
+            investmentResults: investmentResultsData,
+            fireTargetDate: fireTargetDate,
+            fireTargetValue: fireTargetValue
+        });
+    } else {
+        console.log("⏳ Inga investeringsresultat vid sidladdning – hämtar data...");
+        updateInvestmentResults();
+    }
+
+        loadState();
+
+        if (investmentPercentageInput)
+            investmentPercentageInput.addEventListener("input", debounceUpdateInvestmentResults);
+
+        if (investmentDayInput)
+            investmentDayInput.addEventListener("change", updateInvestmentResults);
+
+        if (yearCheckboxes.length > 0)
+            yearCheckboxes.forEach(cb => cb.addEventListener("change", updateInvestmentResults));
+
+        if (showAllYearsCheckbox) {
+            showAllYearsCheckbox.addEventListener("change", function () {
+                document.querySelectorAll(".year-no-data").forEach(row =>
+                    this.checked ? row.classList.remove("d-none") : row.classList.add("d-none")
+                );
+                localStorage.setItem("showAllYears", this.checked ? "true" : "false");
+            });
+
+            const showAll = localStorage.getItem("showAllYears") === "true";
+            showAllYearsCheckbox.checked = showAll;
+            if (showAll) {
+                document.querySelectorAll(".year-no-data").forEach(row => row.classList.remove("d-none"));
+            }
+        }
+
+        window.addEventListener("beforeunload", saveState);
+        // pageshow körs när sidan verkligen visas, även efter bakåtknapp från cache, och undviker loop.
+        window.addEventListener("pageshow", () => {
+            sessionStorage.removeItem("calc.LoadedOnce");
+        });
+
+        function debounceUpdateInvestmentResults() {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => {
+                localStorage.setItem("investmentFieldFocused", "true");
+                document.getElementById("calculationForm")?.submit();
+            }, 500);
+        }
+        window.debounceUpdateInvestmentResults = debounceUpdateInvestmentResults;
+
+        function updateInvestmentResults() {
+            console.log("🔄 Uppdaterar investeringsresultat...");
+            const selectedYears = Array.from(document.querySelectorAll(".year-checkbox"))
+                .filter(cb => cb.checked)
+                .map(cb => cb.getAttribute("data-year"));
+
+            if (selectedYears.length === 0) {
+                console.warn("⚠️ Inga år valda!");
+                return;
+            }
+
+            const requestData = {
+                selectedIncomeReportId: document.getElementById("SelectedIncomeReportId")?.value,
+                selectedFundId: document.getElementById("SelectedFundId")?.value,
+                investmentPercentage: investmentPercentageInput?.value,
+                investmentDay: investmentDayInput?.value,
+                selectedYears: selectedYears
+            };
+
+            fetch("@Url.Action("UpdateInvestmentResults", "Calculation")", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(requestData)
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log("✅ Uppdaterade investeringsresultat:", data);
+                    if (!data?.investmentResults) {
+                        console.error("⚠️ Oväntat format på data:", data);
+                        return;
+                    }
+                    updateChart(data);
+                })
+                .catch(error => console.error("⚠️ Fel vid uppdatering:", error));
+        }
+        window.updateInvestmentResults = updateInvestmentResults;
+
+        function updateChart(data) {
+            if (!data?.investmentResults?.length) {
+                console.warn("⚠️ Ingen data att uppdatera grafen med.");
+                return;
+            }
+
+            const ctx = document.getElementById("investmentChart").getContext("2d");
+            const labels = data.investmentResults.map(i => i.investmentDate);
+            const totalInvested = data.investmentResults.map(i => i.totalInvested);
+            const totalPortfolioValue = data.investmentResults.map(i => i.totalPortfolioValue);
+
+            const fireTargetData = Array(labels.length).fill(null);
+            const fireIndex = labels.indexOf(data.fireTargetDate);
+            if (fireIndex !== -1) fireTargetData[fireIndex] = data.fireTargetValue;
+
+            const datasets = [
+                {
+                    label: 'Totalt Portföljvärde',
+                    data: totalPortfolioValue,
+                    borderColor: 'green',
+                    borderWidth: 2,
+                    fill: false
+                },
+                {
+                    label: 'Totalt Investerat',
+                    data: totalInvested,
+                    borderColor: 'blue',
+                    borderWidth: 2,
+                    fill: false
+                },
+                {
+                    label: '🔥 FIRE-mål',
+                    data: fireTargetData,
+                    borderColor: 'red',
+                    borderWidth: 2,
+                    pointRadius: 6,
+                    pointBackgroundColor: 'red',
+                    fill: false,
+                    hidden: true
+                }
+            ];
+
+            if (window.investmentChart instanceof Chart) {
+                window.investmentChart.destroy();
+            }
+
+            window.investmentChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    plugins: {
+                        legend: {
+                            labels: {
+                                generateLabels: function (chart) {
+                                    const original = Chart.defaults.plugins.legend.labels.generateLabels;
+                                    return original(chart).map(label => ({
+                                        ...label,
+                                        textDecoration: 'none',
+                                        hidden: false,
+                                        fillStyle: chart.isDatasetVisible(label.datasetIndex) ? label.fillStyle : '#ccc',
+                                        strokeStyle: chart.isDatasetVisible(label.datasetIndex) ? label.strokeStyle : '#ccc'
+                                    }));
+                                },
+                                usePointStyle: true,
+                                font: { size: 14, weight: 400, style: 'normal', font: 'system-ui' },
+                                color: 'black'
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (tooltipItem) {
+                                    return `${tooltipItem.dataset.label}: ${Math.round(tooltipItem.raw).toLocaleString('sv-SE')}`;
+                                }
+                            }
+                        }
+                    },
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'År' },
+                            ticks: {
+                                callback: function (_, index) {
+                                    const year = new Date(labels[index]).getFullYear();
+                                    return index === 0 || year !== new Date(labels[index - 1]).getFullYear() ? year : null;
+                                },
+                                autoSkip: false,
+                                maxRotation: 0
+                            }
+                        },
+                        y: {
+                            title: { display: true, text: 'Belopp (SEK)' },
+                            ticks: {
+                                callback: value => value.toLocaleString('sv-SE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 📦 Exportera globala funktioner
+        window.placeCursorAtEnd = placeCursorAtEnd;
+        window.updateInvestmentResults = updateInvestmentResults;
+        window.debounceUpdateInvestmentResults = debounceUpdateInvestmentResults;
+
+    });
+        window.addEventListener("load", () => {
+            if (localStorage.getItem("investmentFieldFocused") === "true") {
+                const input = document.getElementById("investmentPercentage");
+                if (input) {
+                    input.focus();
+                    placeCursorAtEnd(input);
+                }
+                localStorage.removeItem("investmentFieldFocused");
+            }
+        });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
