@@ -92,8 +92,7 @@ public class FundController : Controller
             .Select(n => new NavCourseViewModel
             {
                 Id = n.Id,
-                // NavValue = n.NavValue,
-                Value = n.Value?.ToString("N2") ?? "-",
+                NavValue = n.NavValue,
                 Date = n.Date.ToString("yyyy-MM-dd"),
                 FundName = fund.Name, // ✅ Ingen extra databasfråga behövs
                 Currency = fund.Currency, // ✅ Ingen extra databasfråga behövs
